@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useCallback } from 'react';
 import { useGesture } from '@use-gesture/react';
 
-const imageNames = ['foto1.jpg', 'foto2.jpg', 'foto3.jpg','foto4.jpg', 'foto5.jpg', 'foto6.jpg', 'foto7.jpg'];
+
+
+
+const imageNames = ['foto1.jpg', 'foto2.jpg', 'foto3.jpg', 'foto4.jpg', 'foto5.jpg', 'foto6.jpg', 'foto7.jpg'];
 
 const DEFAULT_IMAGES = imageNames.map(name => ({
-  src: `src/assets/images/${name}`,
+  // Rimuovi eventuali punti, usa solo lo slash iniziale
+  src: `/images/${name}`, 
   alt: `Immagine ${name}`
 }));
 
