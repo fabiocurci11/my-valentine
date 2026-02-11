@@ -4,11 +4,11 @@ import { useGesture } from '@use-gesture/react';
 
 
 
-const imageNames = ['foto1.jpg', 'foto2.jpg', 'foto3.jpg', 'foto4.jpg', 'foto5.jpg', 'foto6.jpg', 'foto7.jpg'];
+const imageNames = Array.from({ length: 25 }, (_, i) => `foto${i + 1}.jpg`)
 
 const DEFAULT_IMAGES = imageNames.map(name => ({
   // Rimuovi eventuali punti, usa solo lo slash iniziale
-  src: `/images/${name}`, 
+  src: `/images/${name}`,
   alt: `Immagine ${name}`
 }));
 
@@ -91,6 +91,7 @@ function computeItemBaseRotation(offsetX, offsetY, sizeX, sizeY, segments) {
 }
 
 export default function DomeGallery({
+
   images = DEFAULT_IMAGES,
   fit = 0.5,
   fitBasis = 'auto',
@@ -130,6 +131,7 @@ export default function DomeGallery({
   const openingRef = useRef(false);
   const openStartedAtRef = useRef(0);
   const lastDragEndAt = useRef(0);
+
 
   useEffect(() => {
     return () => {
@@ -174,6 +176,7 @@ export default function DomeGallery({
   const lockedRadiusRef = useRef(null);
 
   useEffect(() => {
+
     const root = rootRef.current;
     if (!root) return;
     const ro = new ResizeObserver(entries => {
@@ -269,49 +272,70 @@ export default function DomeGallery({
       inertiaRAF.current = null;
     }
   }, []);
-
-  const startInertia = useCallback((vx, vy) => {
+const startInertia = useCallback((vx, vy) => {
     const MAX_V = 1.4;
+    // Normalizziamo le velocità in entrata
     let vX = clamp(vx, -MAX_V, MAX_V) * 80;
     let vY = clamp(vy, -MAX_V, MAX_V) * 80;
-    let frames = 0;
+    
+    // Se è tutto fermo (es. all'avvio), diamo un valore di default a vX
+    if (Math.abs(vX) < 0.01) vX = 2; 
+
     const d = clamp(dragDampening ?? 0.6, 0, 1);
     const frictionMul = 0.94 + 0.055 * d;
-    const stopThreshold = 0.015 - 0.01 * d;
-    const maxFrames = Math.round(90 + 270 * d);
+    
+    // Velocità minima di rotazione (crociera)
+    const autoRotateSpeed = 0.15; 
+
     const step = () => {
+      // Applichiamo l'attrito
       vX *= frictionMul;
       vY *= frictionMul;
-      if (Math.abs(vX) < stopThreshold && Math.abs(vY) < stopThreshold) {
-        inertiaRAF.current = null;
-        return;
+
+      // --- IL SEGRETO PER NON FERMARSI MAI ---
+      // Se la velocità orizzontale scende sotto il minimo, la forziamo.
+      // Questo garantisce che giri sempre verso destra.
+      if (vX < autoRotateSpeed) {
+        vX = autoRotateSpeed;
       }
-      if (++frames > maxFrames) {
-        inertiaRAF.current = null;
-        return;
-      }
+
+      // Calcoliamo la nuova rotazione
       const nextX = clamp(
         rotationRef.current.x - vY / 200,
         -maxVerticalRotationDeg,
         maxVerticalRotationDeg
       );
       const nextY = wrapAngleSigned(rotationRef.current.y + vX / 200);
+      
       rotationRef.current = { x: nextX, y: nextY };
       applyTransform(nextX, nextY);
+
+      // Loop perpetuo
       inertiaRAF.current = requestAnimationFrame(step);
     };
+
     stopInertia();
     inertiaRAF.current = requestAnimationFrame(step);
   }, [dragDampening, maxVerticalRotationDeg, stopInertia]);
 
+  useEffect(() => {
+    //if (!isGalleryActive) return; // Se hai una prop per capire se è attiva
+
+    // Facciamo partire l'inerzia con una piccola spinta iniziale
+    startInertia(0.2, 0);
+
+    return () => stopInertia();
+  }, [startInertia, stopInertia]);
+
   useGesture({
     onDragStart: ({ event }) => {
       if (focusedElRef.current) return;
-      stopInertia();
+      stopInertia(); // Ferma la rotazione automatica mentre l'utente trascina
 
       pointerTypeRef.current = event.pointerType || 'mouse';
       if (pointerTypeRef.current === 'touch') event.preventDefault();
       if (pointerTypeRef.current === 'touch') lockScroll();
+      
       draggingRef.current = true;
       cancelTapRef.current = false;
       movedRef.current = false;
@@ -340,16 +364,14 @@ export default function DomeGallery({
       );
       const nextY = startRotRef.current.y + dxTotal / dragSensitivity;
 
-      const cur = rotationRef.current;
-      if (cur.x !== nextX || cur.y !== nextY) {
-        rotationRef.current = { x: nextX, y: nextY };
-        applyTransform(nextX, nextY);
-      }
+      rotationRef.current = { x: nextX, y: nextY };
+      applyTransform(nextX, nextY);
 
       if (last) {
         draggingRef.current = false;
         let isTap = false;
 
+        // Calcolo se è un click veloce (tap) o un trascinamento
         if (startPosRef.current) {
           const dx = event.clientX - startPosRef.current.x;
           const dy = event.clientY - startPosRef.current.y;
@@ -360,29 +382,27 @@ export default function DomeGallery({
           }
         }
 
-        let [vMagX, vMagY] = velArr;
-        const [dirX, dirY] = dirArr;
-        let vx = vMagX * dirX;
-        let vy = vMagY * dirY;
+        if (isTap && tapTargetRef.current && !focusedElRef.current) {
+          // Se è un tap, apriamo l'immagine (la rotazione resta ferma)
+          openItemFromElement(tapTargetRef.current);
+        } else {
+          // SE NON È UN TAP (quindi è un drag finito o un rilascio)
+          // Ripartiamo sempre con l'inerzia.
+          // Usiamo la velocità del lancio se presente, altrimenti la velocità minima 0.2
+          const [vMagX, vMagY] = velArr;
+          const [dirX, dirY] = dirArr;
+          const vx = vMagX * dirX;
+          const vy = vMagY * dirY;
 
-        if (!isTap && Math.abs(vx) < 0.001 && Math.abs(vy) < 0.001 && Array.isArray(movement)) {
-          const [mx, my] = movement;
-          vx = (mx / dragSensitivity) * 0.02;
-          vy = (my / dragSensitivity) * 0.02;
-        }
-
-        if (!isTap && (Math.abs(vx) > 0.005 || Math.abs(vy) > 0.005)) {
+          // Se il lancio è forte, startInertia userà vx, 
+          // se è debole o nullo, la funzione startInertia che abbiamo scritto 
+          // userà comunque autoRotateSpeed (0.15 o 0.2)
           startInertia(vx, vy);
         }
+
+        // Reset stati
         startPosRef.current = null;
-        cancelTapRef.current = !isTap;
-
-        if (isTap && tapTargetRef.current && !focusedElRef.current) {
-          openItemFromElement(tapTargetRef.current);
-        }
         tapTargetRef.current = null;
-
-        if (cancelTapRef.current) setTimeout(() => (cancelTapRef.current = false), 120);
         if (movedRef.current) lastDragEndAt.current = performance.now();
         movedRef.current = false;
         if (pointerTypeRef.current === 'touch') unlockScroll();
@@ -474,6 +494,8 @@ export default function DomeGallery({
         animatingOverlay.style.opacity = '0';
       });
 
+
+
       const cleanup = () => {
         animatingOverlay.remove();
         originalTilePositionRef.current = null;
@@ -502,6 +524,7 @@ export default function DomeGallery({
                 el.style.transition = '';
                 el.style.opacity = '';
                 openingRef.current = false;
+                startInertia(0.2, 0); 
                 if (!draggingRef.current && rootRef.current?.getAttribute('data-enlarging') !== 'true')
                   document.body.classList.remove('dg-scroll-lock');
               }, 300);
@@ -526,6 +549,7 @@ export default function DomeGallery({
       window.removeEventListener('keydown', onKey);
     };
   }, [enlargeTransitionMs, openedImageBorderRadius, grayscale]);
+
 
   const openItemFromElement = el => {
     if (openingRef.current) return;
@@ -580,17 +604,22 @@ export default function DomeGallery({
     el.style.visibility = 'hidden';
     el.style.zIndex = 0;
 
+    // --- LOGICA FORZATURA QUADRATO ---
+    const size = Math.min(frameR.width, frameR.height);
+    const centeredLeft = (frameR.left - mainR.left) + (frameR.width - size) / 2;
+    const centeredTop = (frameR.top - mainR.top) + (frameR.height - size) / 2;
+
     const overlay = document.createElement('div');
     overlay.className = 'enlarge';
     overlay.style.position = 'absolute';
-    overlay.style.left = frameR.left - mainR.left + 'px';
-    overlay.style.top = frameR.top - mainR.top + 'px';
-    overlay.style.width = frameR.width + 'px';
-    overlay.style.height = frameR.height + 'px';
+    overlay.style.left = centeredLeft + 'px';
+    overlay.style.top = centeredTop + 'px';
+    overlay.style.width = size + 'px';
+    overlay.style.height = size + 'px';
     overlay.style.opacity = '0';
     overlay.style.zIndex = '30';
     overlay.style.willChange = 'transform, opacity';
-    overlay.style.transformOrigin = 'top left';
+    overlay.style.transformOrigin = 'center center';
     overlay.style.transition = `transform ${enlargeTransitionMs}ms ease, opacity ${enlargeTransitionMs}ms ease`;
     overlay.style.borderRadius = openedImageBorderRadius;
     overlay.style.overflow = 'hidden';
@@ -604,19 +633,17 @@ export default function DomeGallery({
     img.style.width = '100%';
     img.style.height = '100%';
     img.style.objectFit = 'cover';
-    img.style.filter = 'none'; 
+    img.style.filter = 'none';
     overlay.appendChild(img);
     viewerRef.current.appendChild(overlay);
 
-    const tx0 = tileR.left - frameR.left;
-    const ty0 = tileR.top - frameR.top;
-    const sx0 = tileR.width / frameR.width;
-    const sy0 = tileR.height / frameR.height;
+    // Calcolo posizione di partenza corretta per il quadrato centrato
+    const tx0 = tileR.left - (mainR.left + centeredLeft);
+    const ty0 = tileR.top - (mainR.top + centeredTop);
+    const sx0 = tileR.width / size;
+    const sy0 = tileR.height / size;
 
-    const validSx0 = isFinite(sx0) && sx0 > 0 ? sx0 : 1;
-    const validSy0 = isFinite(sy0) && sy0 > 0 ? sy0 : 1;
-
-    overlay.style.transform = `translate(${tx0}px, ${ty0}px) scale(${validSx0}, ${validSy0})`;
+    overlay.style.transform = `translate(${tx0}px, ${ty0}px) scale(${sx0}, ${sy0})`;
 
     setTimeout(() => {
       if (!overlay.parentElement) return;
@@ -624,54 +651,6 @@ export default function DomeGallery({
       overlay.style.transform = 'translate(0px, 0px) scale(1, 1)';
       rootRef.current?.setAttribute('data-enlarging', 'true');
     }, 16);
-
-    const wantsResize = openedImageWidth || openedImageHeight;
-    if (wantsResize) {
-      const onFirstEnd = ev => {
-        if (ev.propertyName !== 'transform') return;
-        overlay.removeEventListener('transitionend', onFirstEnd);
-        const prevTransition = overlay.style.transition;
-        overlay.style.transition = 'none';
-        
-        // Calcolo dimensioni finali basate sulle props custom
-        const tempDiv = document.createElement('div');
-        tempDiv.style.cssText = `position: absolute; width: ${openedImageWidth}; height: ${openedImageHeight}; visibility: hidden;`;
-        document.body.appendChild(tempDiv);
-        const targetRect = tempDiv.getBoundingClientRect();
-        document.body.removeChild(tempDiv);
-
-        const tempWidth = targetRect.width + 'px';
-        const tempHeight = targetRect.height + 'px';
-
-        overlay.style.width = tempWidth;
-        overlay.style.height = tempHeight;
-        
-        const newRect = overlay.getBoundingClientRect();
-        overlay.style.width = frameR.width + 'px';
-        overlay.style.height = frameR.height + 'px';
-        void overlay.offsetWidth;
-        
-        overlay.style.transition = `left ${enlargeTransitionMs}ms ease, top ${enlargeTransitionMs}ms ease, width ${enlargeTransitionMs}ms ease, height ${enlargeTransitionMs}ms ease`;
-        
-        const centeredLeft = frameR.left - mainR.left + (frameR.width - newRect.width) / 2;
-        const centeredTop = frameR.top - mainR.top + (frameR.height - newRect.height) / 2;
-        
-        requestAnimationFrame(() => {
-          overlay.style.left = `${centeredLeft}px`;
-          overlay.style.top = `${centeredTop}px`;
-          overlay.style.width = tempWidth;
-          overlay.style.height = tempHeight;
-        });
-        const cleanupSecond = () => {
-          overlay.removeEventListener('transitionend', cleanupSecond);
-          overlay.style.transition = prevTransition;
-        };
-        overlay.addEventListener('transitionend', cleanupSecond, {
-          once: true
-        });
-      };
-      overlay.addEventListener('transitionend', onFirstEnd);
-    }
   };
 
   useEffect(() => {
@@ -680,7 +659,7 @@ export default function DomeGallery({
     };
   }, []);
 
-  
+
   const cssStyles = `
     .sphere-root {
       --radius: 520px;

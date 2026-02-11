@@ -8,14 +8,15 @@ const ScrollReveal = ({
   children,
   scrollContainerRef,
   enableBlur = true,
-  baseOpacity = 0, // Portato a 0 per un effetto reveal più pulito
+  baseOpacity = 0,
   baseRotation = 3,
-  blurStrength = 10, // Aumentato per un effetto più visibile
+  blurStrength = 10,
   containerClassName = '',
   textClassName = '',
-  // Modificati i default per assicurare che l'animazione finisca quando il testo è al centro
+  // Parametri di controllo altezza
+  startView = "85%",      // Quando inizia lo svelamento (es. 95% = subito, 50% = metà schermo)
   rotationEnd = 'top 30%', 
-  wordAnimationEnd = 'top 20%'
+  wordAnimationEnd = 'top 0%'
 }) => {
   const containerRef = useRef(null);
 
@@ -23,8 +24,24 @@ const ScrollReveal = ({
     const text = typeof children === 'string' ? children : '';
     return text.split(/(\s+)/).map((word, index) => {
       if (word.match(/^\s+$/)) return word;
+
+      // Pulizia per il controllo parole chiave
+      const cleanWord = word.toLowerCase().replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "").trim();
+      
+      // Definiamo quali parole devono essere rosse
+      const isSpecial = cleanWord === 'valentine' || cleanWord === 'surprise' || cleanWord === 'valentino';
+
       return (
-        <span className="inline-block word" key={index} style={{ willChange: 'opacity, filter' }}>
+        <span 
+          className="inline-block word" 
+          key={index} 
+          style={{ 
+            willChange: 'opacity, filter',
+            color: isSpecial ? '#ff0000' : 'inherit',
+            fontWeight: isSpecial ? '900' : 'inherit',
+            textShadow: isSpecial ? '0 0 15px rgba(255,0,0,0.3)' : 'none'
+          }}
+        >
           {word}
         </span>
       );
@@ -35,14 +52,11 @@ const ScrollReveal = ({
     const el = containerRef.current;
     if (!el) return;
 
-    // Se non passi un container specifico, usa la window (standard)
     const scroller = scrollContainerRef?.current || window;
-
-    // Refresh ScrollTrigger per evitare calcoli errati dopo il caricamento delle particelle
     ScrollTrigger.refresh();
 
     const ctx = gsap.context(() => {
-      // 1. Animazione della rotazione del blocco intero
+      // 1. Rotazione del blocco
       gsap.fromTo(el, 
         { transformOrigin: 'center center', rotate: baseRotation }, 
         {
@@ -51,23 +65,23 @@ const ScrollReveal = ({
           scrollTrigger: {
             trigger: el,
             scroller,
-            start: 'top 90%', // Inizia quando il top del testo è al 90% della visuale
+            start: 'top 95%',
             end: rotationEnd,
-            scrub: 0.5, // Aggiunto un piccolo smoothing (0.5s) per evitare l'errore di Firefox
+            scrub: 0.5,
           }
         }
       );
 
       const wordElements = el.querySelectorAll('.word');
 
-      // 2. Animazione Opacità e Blur delle singole parole
+      // 2. Timeline per Opacità e Blur
       const tl = gsap.timeline({
         scrollTrigger: {
           trigger: el,
           scroller,
-          start: 'top 85%', 
+          start: `top ${startView}`, // Utilizzo della prop dinamica
           end: wordAnimationEnd,
-          scrub: 0.8, // Rende lo scroll più fluido e meno "scattoso"
+          scrub: 0.8,
         }
       });
 
@@ -75,26 +89,29 @@ const ScrollReveal = ({
         { 
           opacity: baseOpacity, 
           filter: enableBlur ? `blur(${blurStrength}px)` : 'blur(0px)',
-          y: 10 // Aggiunto un piccolo movimento verso l'alto per un effetto più moderno
+          y: 10 
         }, 
         {
           ease: 'none',
           opacity: 1,
           filter: 'blur(0px)',
           y: 0,
-          stagger: 0.1, // Distanzia leggermente l'apparizione delle parole
+          stagger: 0.1,
         }
       );
     }, el);
 
     return () => {
-      ctx.revert(); // Pulisce tutto correttamente al dismount
+      ctx.revert();
     };
-  }, [scrollContainerRef, enableBlur, baseRotation, baseOpacity, rotationEnd, wordAnimationEnd, blurStrength]);
+  }, [scrollContainerRef, enableBlur, baseRotation, baseOpacity, rotationEnd, wordAnimationEnd, blurStrength, startView]);
 
   return (
     <div ref={containerRef} className={`my-10 w-full ${containerClassName}`}>
-      <p className={`text-[clamp(1.5rem,5vw,3.5rem)] leading-[1.4] font-bold text-white ${textClassName}`}>
+      <p 
+        className={`text-[clamp(1.5rem,5vw,3.5rem)] text-center leading-[1.4] font-bold text-white ${textClassName}`}
+        style={{ whiteSpace: 'pre-line' }} // Rispetta gli invii nel testo
+      >
         {splitText}
       </p>
     </div>

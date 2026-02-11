@@ -5,9 +5,13 @@ import ScrollReveal from "./components/ScrollReveal";
 import DomeGallery from './components/DomeGallery';
 import ScrollVelocity from './components/ScrollVelocity';
 
+// Memoizziamo i componenti per evitare render superflui
 const MemoizedHearts = memo(HeartBackground);
+const MemoizedDomeGallery = memo(DomeGallery);
+const MemoizedRotatingText = memo(RotatingText);
 
 function App() {
+  
   const [isGalleryActive, setIsGalleryActive] = useState(false);
   const [heroOpacity, setHeroOpacity] = useState(1);
   const [heroScale, setHeroScale] = useState(1);
@@ -105,6 +109,7 @@ function App() {
     setIsGalleryActive(false);
     setDragX(0);
     setIsDragging(false);
+    
   };
 
   const handleMove = (e) => {
@@ -129,6 +134,15 @@ function App() {
     if (!isGalleryActive) setDragX(0);
   };
 
+  // Memoizziamo il testo rotante per evitare reset dell'animazione
+  const rotatingTextElement = useMemo(() => (
+    <MemoizedRotatingText
+      texts={['Only', 'Partner', 'In Crime', 'Trouble', 'Always','Nurse', 'First Aid']}
+      mainClassName="px-6 uppercase py-3 bg-red-600 text-white rounded-2xl font-bold text-2xl md:text-3xl inline-block shadow-xl"
+      rotationInterval={2000}
+    />
+  ), []);
+
   return (
     <div className={`relative block w-full bg-slate-900 ${!isUnlocked ? 'h-screen overflow-hidden' : 'overflow-x-hidden'}`}>
       {useMemo(() => <MemoizedHearts svgPath="/heart.svg" />, [])}
@@ -144,11 +158,7 @@ function App() {
       >
         <div className="space-y-4">
           <h1 className="text-4xl md:text-7xl font-black text-white italic uppercase tracking-tighter">Are you my</h1>
-          <RotatingText
-            texts={['Nurse', 'First Aid', 'Only', 'Partner', 'In Crime', 'Trouble', 'Always']}
-            mainClassName="px-6 uppercase py-3 bg-red-600 text-white rounded-2xl font-bold text-2xl md:text-3xl inline-block shadow-xl"
-            rotationInterval={2000}
-          />
+          {rotatingTextElement}
           <h1 className="text-4xl md:text-7xl font-black text-white italic uppercase tracking-tighter">valentine?</h1>
         </div>
 
@@ -186,17 +196,16 @@ function App() {
 
       {isUnlocked && (
         <>
-          {/* 2. REVEAL SECTION */}
           <section ref={secondSectionRef} className="relative z-10 w-full min-h-screen flex items-center justify-center px-6 text-center text-white/80" style={{ opacity: isGalleryActive ? 0 : 1 }}>
-            <ScrollReveal baseOpacity={0.05} blurStrength={20}>
-              "A man dies when he is forgotten." Ma finché custodiremo questo caveau, il nostro tempo rimarrà infinito.
+            <ScrollReveal baseOpacity={0.05} blurStrength={20} startView="60%">
+             {`Since you've made it all the way here, I guess you are officially my Valentine...
+              So, this is what it means to be mine! 
+              Now let me show you the rewards, just a little further.`}
             </ScrollReveal>
           </section>
 
-          {/* 3. GALLERY + VELOCITY INTEGRATED SECTION */}
           <section className="relative z-20 h-[calc(100vh-80px)] w-full flex flex-col items-center">
             
-            {/* Gallery Wrapper */}
             <div className="w-full h-screen flex items-center justify-center p-4 pb-0">
               <div
                 className={`transition-all duration-1000 ease-[cubic-bezier(0.23,1,0.32,1)] flex items-center justify-center overflow-hidden ${isGalleryActive
@@ -209,12 +218,24 @@ function App() {
                 )}
 
                 <div className="w-full h-full flex items-center justify-center relative bg-transparent">
-                  {!isGalleryActive ? (
-                    <div className="w-full h-full relative flex items-center justify-center">
-                      <div className="absolute inset-0 z-30" />
-                      <div
+                  
+                  {/* Gallery con controllo pointer-events e opacità */}
+                  <div className={`w-full h-full transition-opacity duration-1000 ${(!isGalleryActive || showContent) ? 'opacity-100' : 'opacity-0'} ${!isGalleryActive ? 'pointer-events-none' : 'pointer-events-auto'}`}>
+                    <MemoizedDomeGallery 
+                    key={isGalleryActive ? 'active-gallery' : 'idle-gallery'}
+                      fit={isGalleryActive ? 0.9 : 1.2} 
+                      segments={25} 
+                      minRadius={!isGalleryActive ? 500 : 600} 
+                      grayscale={!isGalleryActive} 
+                      maxVerticalRotationDeg={isGalleryActive ? 10 : undefined}
+                    />
+                  </div>
+
+                  {!isGalleryActive && (
+                    <div className="absolute inset-0 z-40 flex items-center justify-center">
+                       <div
                         ref={sliderRef}
-                        className="absolute bottom-12 z-50 w-[280px] h-16 bg-white/5 border border-white/10 backdrop-blur-md rounded-full p-1 shadow-inner overflow-hidden"
+                        className="absolute bottom-12 w-[280px] h-16 bg-white/5 border border-white/10 backdrop-blur-md rounded-full p-1 shadow-inner overflow-hidden pointer-events-auto"
                         style={{ touchAction: 'none' }}
                         onMouseMove={handleMove} onTouchMove={handleMove} onMouseUp={handleRelease} onTouchEnd={handleRelease}
                       >
@@ -229,12 +250,11 @@ function App() {
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><path d="M9 18l6-6-6-6" /></svg>
                         </div>
                       </div>
-                      <DomeGallery fit={1.2} segments={30} grayscale={true} />
                     </div>
-                  ) : showContent ? (
-                    <div className="w-full h-full animate-in fade-in duration-1000"><DomeGallery fit={0.9} segments={30} grayscale={false} /></div>
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center space-y-8 z-50">
+                  )}
+
+                  {isGalleryActive && !showContent && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center space-y-8 z-50 bg-slate-900">
                       <svg className="w-20 h-20 text-red-600 fill-current animate-heart-pulse drop-shadow-[0_0_20px_rgba(220,38,38,0.6)]" viewBox="0 0 24 24">
                         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                       </svg>
@@ -245,17 +265,15 @@ function App() {
               </div>
             </div>
 
-            {/* SCROLL VELOCITY - Fix taglio desktop */}
-            <div
-              className="w-full py-4 transition-opacity duration-700"
-              style={{ opacity: isGalleryActive ? 0 : 1 }}
-            >
-              <ScrollVelocity 
-                texts={['F + S +', 'S + F +']} 
-                velocity={100} 
-                className="custom-scroll-text" 
-              />
-            </div>
+            {!isGalleryActive && (
+              <div className="w-full py-4 transition-opacity duration-700">
+                <ScrollVelocity 
+                  texts={['F + S +', 'S + F +']} 
+                  velocity={100} 
+                  className="custom-scroll-text" 
+                />
+              </div>
+            )}
           </section>
         </>
       )}
@@ -265,16 +283,13 @@ function App() {
         .animate-shimmer { animation: shimmer 3s linear infinite; }
         @keyframes heart-pulse { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.3); } 30% { transform: scale(1); } 45% { transform: scale(1.15); } }
         .animate-heart-pulse { animation: heart-pulse 1.2s infinite cubic-bezier(0.215, 0.61, 0.355, 1); }
-        
         .custom-scroll-text { 
           font-size: clamp(2.5rem, 12vw, 10rem); 
           font-weight: 900; 
           font-style: italic; 
           text-transform: uppercase; 
           color: rgba(255, 255, 255, 0.2);
-          /* FIX TAGLIO: Aumentiamo l'altezza riga e aggiungiamo padding verticale */
           line-height: 0.9!important;
-         
           display: flex;
           align-items: center;
         }
