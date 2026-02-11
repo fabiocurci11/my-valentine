@@ -6,7 +6,10 @@
 html {
   scroll-behavior: auto !important; /* Disabilita quello nativo per non andare in conflitto con quello custom */
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable; /* Evita il salto del layout quando scompare la scrollbar */
 }
+
+
 
 
 @layer base {
